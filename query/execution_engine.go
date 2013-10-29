@@ -1018,6 +1018,9 @@ func (e *ExecutionEngine) Aggregate(data interface{}) (interface{}, error) {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
+	if e.state == nil {
+		return nil, errors.New("skyd.ExecutionEngine: Engine destroyed")
+	}
 	functionName := C.CString("sky_aggregate")
 	if functionName == nil {
 		return nil, errors.New("skyd.ExecutionEngine: Unable to allocate aggregation function name")
@@ -1043,6 +1046,9 @@ func (e *ExecutionEngine) Aggregate(data interface{}) (interface{}, error) {
 func (e *ExecutionEngine) Merge(results interface{}, data interface{}) (interface{}, error) {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
+	if e.state == nil {
+		return nil, errors.New("skyd.ExecutionEngine: Engine destroyed")
+	}
 
 	functionName := C.CString("sky_merge")
 	if functionName == nil {
