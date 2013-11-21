@@ -2,11 +2,14 @@ package server
 
 import (
 	"fmt"
+	"github.com/stretchr/testify/assert"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func assertResponse(t *testing.T, resp *http.Response, statusCode int, content string, message string) {
@@ -70,4 +73,54 @@ func _dumpObject(t *testing.T, tableName string, objectId string) {
 	defer resp.Body.Close()
 	body, _ := ioutil.ReadAll(resp.Body)
 	fmt.Println(string(body))
+}
+
+type StreamingClient struct {
+	client   *http.Client
+	in       *io.PipeReader
+	out      *io.PipeWriter
+	finished chan interface{}
+	t        *testing.T
+}
+
+func NewStreamingClient(t *testing.T, endpoint string) (*StreamingClient, error) {
+	method := "PATCH"
+
+	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: false}}
+	in, out := io.Pipe()
+	req, err := http.NewRequest(method, endpoint, in)
+	assert.NoError(t, err)
+	req.Header.Add("Content-Type", "application/json")
+
+	finished := make(chan interface{})
+	go func() {
+		resp, err := client.Do(req)
+		assert.NoError(t, err)
+		finished <- resp
+	}()
+	return &StreamingClient{client: client, in: in, out: out, finished: finished, t: t}, nil
+}
+
+func (s *StreamingClient) Write(event string) {
+	_, err := io.WriteString(io.Writer(s.out), event)
+	assert.NoError(s.t, err)
+}
+
+func (s *StreamingClient) Flush() {
+	// NOTE: This seems to be the only way to flush the http Client buffer...
+	// so here we just fill up the buffer to force a flush.
+	_, err := fmt.Fprintf(s.out, "%4096s", " ")
+	assert.NoError(s.t, err)
+}
+
+func (s *StreamingClient) Close() interface{} {
+	defer s.in.Close()
+	s.out.Close()
+	select {
+	case ret := <-s.finished:
+		return ret
+	case <-time.After(1 * time.Second):
+		s.t.Fail()
+	}
+	return nil
 }

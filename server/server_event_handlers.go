@@ -6,6 +6,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/skydb/sky/core"
 	"io"
+	"log"
 	"net/http"
 	"time"
 )
@@ -33,6 +34,9 @@ func (s *Server) addEventHandlers() {
 
 	// Streaming import.
 	s.router.HandleFunc("/tables/{name}/events", s.streamUpdateEventsHandler).Methods("PATCH")
+
+	// Table agnostic streaming import.
+	s.router.HandleFunc("/events", s.streamUpdateEventsHandler).Methods("PATCH")
 }
 
 // GET /tables/:name/objects/:objectId/events
@@ -151,33 +155,113 @@ func (s *Server) updateEventHandler(w http.ResponseWriter, req *http.Request, pa
 	return nil, s.db.InsertEvent(t.Name, vars["objectId"], event, false)
 }
 
+// Used by streaming handler.
+type objectEvents map[string][]*core.Event
+
+func (s *Server) flushTableEvents(table *core.Table, objects objectEvents) (int, error) {
+	count, err := s.db.InsertObjects(table.Name, objects, false)
+	if err != nil {
+		return count, fmt.Errorf("Cannot put event: %v", err)
+	}
+	log.Printf("Flushed %v events!", count)
+	return count, nil
+}
+
 // PATCH /tables/:name/events
 func (s *Server) streamUpdateEventsHandler(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	t0 := time.Now()
 
-	table, err := s.OpenTable(vars["name"])
-	if err != nil {
-		s.logger.Printf("ERR %v", err)
-		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, `{"message":"%v"}`, err)
-		return
+	var table *core.Table
+	tableName := vars["name"]
+	if tableName != "" {
+		var err error
+		table, err = s.OpenTable(tableName)
+		if err != nil {
+			s.logger.Printf("ERR %v", err)
+			fmt.Fprintf(w, `{"message":"%v"}`, err)
+			return
+		}
 	}
 
-	objects := make(map[string][]*core.Event)
+	tableObjects := make(map[*core.Table]objectEvents)
+	tableEventsCount := make(map[*core.Table]uint)
 
 	events_written := 0
-	err = func() error {
+	err := func() error {
 		// Stream in JSON event objects.
 		decoder := json.NewDecoder(req.Body)
+
+		// Set up events decoder listener
+		events := make(chan map[string]interface{})
+		eventErrors := make(chan error)
+		go func(decoder *json.Decoder) {
+			for {
+				rawEvent := map[string]interface{}{}
+				if err := decoder.Decode(&rawEvent); err == io.EOF {
+					close(events)
+					break
+				} else if err != nil {
+					eventErrors <- fmt.Errorf("Malformed json event: %v", err)
+					break
+				}
+				events <- rawEvent
+			}
+		}(decoder)
+
+		flushTimer := time.NewTimer(time.Duration(s.StreamFlushPeriod) * time.Millisecond)
+
+	loop:
 		for {
+
 			// Read in a JSON object.
 			rawEvent := map[string]interface{}{}
-			if err := decoder.Decode(&rawEvent); err == io.EOF {
-				break
-			} else if err != nil {
-				return fmt.Errorf("Malformed json event: %v", err)
+			select {
+			case event, ok := <-events:
+				if !ok {
+					break loop
+				} else {
+					rawEvent = event
+				}
+
+			case err := <-eventErrors:
+				return err
+
+			case <-flushTimer.C:
+				// Flush ALL events.
+				for table, events := range tableObjects {
+					log.Printf("Streaming flush period exceeding, flushing...")
+					count, err := s.flushTableEvents(table, events)
+					if err != nil {
+						return err
+					}
+					events_written += count
+				}
+				// TODO: Should we reslice the slices to 0 length instead?
+				tableObjects = make(map[*core.Table]objectEvents)
+				tableEventsCount = make(map[*core.Table]uint)
+				continue loop
 			}
+
+			// Extract table name, if necessary.
+			var eventTable *core.Table
+			if table == nil {
+				tableName, ok := rawEvent["table"].(string)
+				if !ok {
+					return fmt.Errorf("Table name required within event when using generic event stream.")
+				}
+				var err error
+				eventTable, err = s.OpenTable(tableName)
+				if err != nil {
+					s.logger.Printf("ERR %v", err)
+					fmt.Fprintf(w, `{"message":"%v"}`, err)
+					return fmt.Errorf("Cannot open table %s: %+v", tableName, err)
+				}
+				delete(rawEvent, "table")
+			} else {
+				eventTable = table
+			}
+
 			// Extract the object identifier.
 			objectId, ok := rawEvent["id"].(string)
 			if !ok {
@@ -185,15 +269,37 @@ func (s *Server) streamUpdateEventsHandler(w http.ResponseWriter, req *http.Requ
 			}
 
 			// Convert to a Sky event and insert.
-			event, err := table.DeserializeEvent(rawEvent)
+			event, err := eventTable.DeserializeEvent(rawEvent)
 			if err != nil {
 				return fmt.Errorf("Cannot deserialize: %v", err)
 			}
-			if err = s.db.Factorizer().FactorizeEvent(event, table.Name, table.PropertyFile(), true); err != nil {
+			if err = s.db.Factorizer().FactorizeEvent(event, eventTable.Name, eventTable.PropertyFile(), true); err != nil {
 				return fmt.Errorf("Cannot factorize: %v", err)
 			}
 
-			objects[objectId] = append(objects[objectId], event)
+			if _, ok := tableObjects[eventTable]; !ok {
+				tableObjects[eventTable] = make(objectEvents)
+				tableEventsCount[eventTable] = 0
+			}
+
+			// Add event to table buffer.
+			tableObjects[eventTable][objectId] = append(tableObjects[eventTable][objectId], event)
+			tableEventsCount[eventTable] += 1
+
+			// Flush events if exceeding threshold.
+			if tableEventsCount[eventTable] >= s.StreamFlushThreshold {
+				log.Printf("Event count %v exceeded threshold of %v, flushing...", tableEventsCount[eventTable], s.StreamFlushThreshold)
+				count, err := s.flushTableEvents(eventTable, tableObjects[eventTable])
+				if err != nil {
+					return err
+				}
+				events_written += count
+
+				// TODO: optimize this by reusing slice
+				delete(tableObjects, eventTable)
+				delete(tableEventsCount, eventTable)
+			}
+
 		}
 
 		return nil
@@ -201,11 +307,14 @@ func (s *Server) streamUpdateEventsHandler(w http.ResponseWriter, req *http.Requ
 
 	if err == nil {
 		err = func() error {
-			count, err := s.db.InsertObjects(table.Name, objects, false)
-			if err != nil {
-				return fmt.Errorf("Cannot put event: %v", err)
+			for table, objects := range tableObjects {
+				log.Printf("Streaming connection closing, flushing events...")
+				count, err := s.flushTableEvents(table, objects)
+				if err != nil {
+					return err
+				}
+				events_written += count
 			}
-			events_written += count
 			return nil
 		}()
 	}

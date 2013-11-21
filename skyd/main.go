@@ -40,6 +40,8 @@ func init() {
 	flag.UintVar(&config.MaxDBs, "max-dbs", config.MaxDBs, "max number of named btrees in the database (mdb.MaxDBs)")
 	flag.UintVar(&config.MaxReaders, "max-readers", config.MaxReaders, "max number of concurrenly executing queries (mdb.MaxReaders)")
 	flag.StringVar(&configPath, "config", "", "the path to the config file")
+	flag.UintVar(&config.StreamFlushPeriod, "stream-flush-period", config.StreamFlushPeriod, "time period on which to flush streamed events")
+	flag.UintVar(&config.StreamFlushThreshold, "stream-flush-threshold", config.StreamFlushThreshold, "the maximum number of events (per table) in event stream before flush")
 }
 
 //--------------------------------------
@@ -70,6 +72,8 @@ func main() {
 	s.NoSync = config.NoSync
 	s.MaxDBs = config.MaxDBs
 	s.MaxReaders = config.MaxReaders
+	s.StreamFlushPeriod = config.StreamFlushPeriod
+	s.StreamFlushThreshold = config.StreamFlushThreshold
 	writePidFile()
 	setupSignalHandlers(s)
 

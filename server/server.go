@@ -33,19 +33,21 @@ var defaultServletCount = runtime.NumCPU()
 
 // A Server is the front end that controls access to tables.
 type Server struct {
-	httpServer       *http.Server
-	router           *mux.Router
-	logger           *log.Logger
-	db               db.DB
-	path             string
-	listener         net.Listener
-	tables           map[string]*core.Table
-	shutdownChannel  chan bool
-	shutdownFinished chan bool
-	mutex            sync.Mutex
-	NoSync           bool
-	MaxDBs           uint
-	MaxReaders       uint
+	httpServer           *http.Server
+	router               *mux.Router
+	logger               *log.Logger
+	db                   db.DB
+	path                 string
+	listener             net.Listener
+	tables               map[string]*core.Table
+	shutdownChannel      chan bool
+	shutdownFinished     chan bool
+	mutex                sync.Mutex
+	NoSync               bool
+	MaxDBs               uint
+	MaxReaders           uint
+	StreamFlushPeriod    uint
+	StreamFlushThreshold uint
 }
 
 //------------------------------------------------------------------------------
@@ -77,14 +79,16 @@ func (e *TextPlainContentTypeError) Error() string {
 func NewServer(port uint, path string) *Server {
 	r := mux.NewRouter()
 	s := &Server{
-		httpServer: &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: r},
-		router:     r,
-		logger:     log.New(os.Stdout, "", log.LstdFlags),
-		path:       path,
-		tables:     make(map[string]*core.Table),
-		NoSync:     false,
-		MaxDBs:     4096,
-		MaxReaders: 126,
+		httpServer:           &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: r},
+		router:               r,
+		logger:               log.New(os.Stdout, "", log.LstdFlags),
+		path:                 path,
+		tables:               make(map[string]*core.Table),
+		NoSync:               false,
+		MaxDBs:               4096,
+		MaxReaders:           126,
+		StreamFlushPeriod:    60 * 1000, // milliseconds
+		StreamFlushThreshold: 1000,
 	}
 
 	s.addHandlers()
