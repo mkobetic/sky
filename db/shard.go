@@ -14,7 +14,7 @@ import (
 
 // shard represents a subset of the database stored in a single LMDB environment.
 type shard struct {
-	sync.RWMutex
+	sync.Mutex
 	path string
 	env  *mdb.Env
 }
@@ -77,8 +77,8 @@ func (s *shard) close() {
 
 // Cursor retrieves a cursor for iterating over the shard.
 func (s *shard) Cursor(tablespace string) (*mdb.Cursor, error) {
-	s.RLock()
-	defer s.RUnlock()
+	s.Lock()
+	defer s.Unlock()
 
 	txn, dbi, err := s.txn(tablespace, true)
 	if err != nil {
@@ -111,23 +111,16 @@ func (s *shard) InsertEvent(tablespace string, id string, event *core.Event) err
 	if err != nil {
 		return fmt.Errorf("lmdb txn begin error: %s", err)
 	}
+	defer txn.Commit()
 
 	c, err := s.cursor(txn, dbi)
 	if err != nil {
-		txn.Abort()
 		return fmt.Errorf("lmdb cursor error: %s", err)
 	}
+	defer c.Close()
 
 	if err := s.insertEvent(txn, dbi, c, id, core.ShiftTimeBytes(event.Timestamp), event.Data); err != nil {
-		c.Close()
-		txn.Abort()
 		return err
-	}
-	c.Close()
-
-	// Commit the transaction.
-	if err := txn.Commit(); err != nil {
-		return fmt.Errorf("lmdb txn commit error: %s", err)
 	}
 
 	return nil
@@ -177,24 +170,18 @@ func (s *shard) InsertEvents(tablespace string, id string, events []*core.Event)
 	if err != nil {
 		return fmt.Errorf("lmdb txn begin error: %s", err)
 	}
+	defer txn.Commit()
 
 	c, err := s.cursor(txn, dbi)
 	if err != nil {
 		return fmt.Errorf("lmdb cursor error: %s", err)
 	}
+	defer c.Close()
 
 	for _, event := range events {
 		if err := s.insertEvent(txn, dbi, c, id, core.ShiftTimeBytes(event.Timestamp), event.Data); err != nil {
-			c.Close()
-			txn.Abort()
 			return err
 		}
-	}
-	c.Close()
-
-	// Commit the transaction.
-	if err := txn.Commit(); err != nil {
-		return fmt.Errorf("lmdb txn commit error: %s", err)
 	}
 
 	return nil
@@ -232,10 +219,7 @@ func (s *shard) GetEvent(tablespace string, id string, timestamp time.Time) (*co
 func (s *shard) getEvent(c *mdb.Cursor, id string, timestamp []byte) (map[int64]interface{}, error) {
 	// Position cursor at possible event.
 	_, _, err := mdbGet2(c, []byte(id), timestamp, mdb.GET_RANGE)
-	if err == mdb.NotFound {
-		return nil, nil
-	} else if err == mdb.Incompatibile {
-		// This only occurs when a db is read before it is created.
+	if err == mdb.NotFound || err == mdb.Incompatibile {
 		return nil, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("lmdb cursor get error: %s", err)
@@ -288,10 +272,7 @@ func (s *shard) GetEvents(tablespace string, id string) ([]*core.Event, error) {
 	defer c.Close()
 
 	// Initialize cursor.
-	if _, _, err := mdbGet2(c, []byte(id), []byte{0}, mdb.GET_RANGE); err == mdb.NotFound {
-		return events, nil
-	} else if err == mdb.Incompatibile {
-		// This only occurs when a db is read before it is created.
+	if _, _, err := mdbGet2(c, []byte(id), []byte{0}, mdb.GET_RANGE); err == mdb.NotFound || err == mdb.Incompatibile {
 		return events, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("lmdb cursor init error: %s", err)
@@ -325,7 +306,6 @@ func (s *shard) GetEvents(tablespace string, id string) ([]*core.Event, error) {
 		if _, _, err := c.Get([]byte(id), mdb.NEXT_DUP); err == mdb.NotFound {
 			break
 		} else if err != nil {
-			c.Close()
 			return nil, fmt.Errorf("lmdb cursor next dup error: %s", err)
 		}
 	}
@@ -342,30 +322,21 @@ func (s *shard) DeleteEvent(tablespace string, id string, timestamp time.Time) e
 	if err != nil {
 		return fmt.Errorf("lmdb txn begin error: %s", err)
 	}
+	defer txn.Commit()
 
 	c, err := s.cursor(txn, dbi)
 	if err != nil {
-		txn.Abort()
 		return fmt.Errorf("lmdb cursor error: %s", err)
 	}
+	defer c.Close()
 
 	// Check if event exists and move the cursor.
 	if old, err := s.getEvent(c, id, core.ShiftTimeBytes(timestamp)); err != nil {
-		c.Close()
-		txn.Abort()
 		return err
 	} else if old != nil {
 		if err := c.Del(0); err != nil {
-			c.Close()
-			txn.Abort()
 			return fmt.Errorf("lmdb cursor del error: %s", err)
 		}
-	}
-	c.Close()
-
-	// Commit the transaction.
-	if err := txn.Commit(); err != nil {
-		return fmt.Errorf("lmdb txn commit error: %s", err)
 	}
 
 	return nil
@@ -381,17 +352,11 @@ func (s *shard) DeleteObject(tablespace, id string) error {
 	if err != nil {
 		return fmt.Errorf("shard delete txn error: %s", err)
 	}
+	defer txn.Commit()
 
 	// Delete the key.
 	if err = txn.Del(dbi, []byte(id), nil); err != nil && err != mdb.NotFound {
-		txn.Abort()
 		return fmt.Errorf("shard delete error: %s", err)
-	}
-
-	// Commit the transaction.
-	if err = txn.Commit(); err != nil {
-		txn.Abort()
-		return fmt.Errorf("shard delete commit error: %s", err)
 	}
 
 	return nil
@@ -409,17 +374,11 @@ func (s *shard) drop(tablespace string) error {
 	if err != nil {
 		return fmt.Errorf("drop txn error: %s", err)
 	}
+	defer txn.Commit()
 
 	// Drop the table.
 	if err = txn.Drop(dbi, 1); err != nil {
-		txn.Abort()
 		return fmt.Errorf("drop error: %s", err)
-	}
-
-	// Commit the transaction.
-	if err = txn.Commit(); err != nil {
-		txn.Abort()
-		return fmt.Errorf("drop commit error: %s", err)
 	}
 
 	return nil
