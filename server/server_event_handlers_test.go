@@ -38,6 +38,18 @@ func TestServerUpdateEvents(t *testing.T) {
 	})
 }
 
+// Ensure that we receive an error when inserting a large record.
+func TestServerInsertEventTooLarge(t *testing.T) {
+	runTestServer(func(s *Server) {
+		setupTestTable("foo")
+		setupTestProperty("foo", "bar", true, "string")
+
+		// Send one large event (600 character string).
+		resp, _ := sendTestHttpRequest("PUT", "http://localhost:8586/tables/foo/objects/xyz/events/2012-01-01T02:00:00Z", "application/json", `{"data":{"bar":"012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"}}`)
+		assertResponse(t, resp, 500, `{"message":"lmdb txn put error: MDB_BAD_VALSIZE: Too big key/data, key is empty, or wrong DUPFIXED size"}`+"\n", "Too large event")
+	})
+}
+
 // Ensure that we can delete all events for an object.
 func TestServerDeleteEvent(t *testing.T) {
 	runTestServer(func(s *Server) {
