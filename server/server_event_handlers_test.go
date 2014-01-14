@@ -111,6 +111,16 @@ func TestServerStreamUpdateEvents(t *testing.T) {
 	})
 }
 
+// Ensure that streaming a large event returns an error.
+func TestServerStreamEventTooLarge(t *testing.T) {
+	runTestServer(func(s *Server) {
+		setupTestTable("foo")
+		setupTestProperty("foo", "bar", true, "string")
+		resp, _ := sendTestHttpRequest("PATCH", "http://localhost:8586/tables/foo/events", "application/json", `{"id":"xyz","timestamp":"2012-01-01T02:00:00Z","data":{"bar":"012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"}}`)
+		assertResponse(t, resp, 500, `{"message":"Cannot put event: lmdb txn put error: MDB_BAD_VALSIZE: Too big key/data, key is empty, or wrong DUPFIXED size", "events_written":0}`, "Stream event too large")
+	})
+}
+
 // Ensure that we can put multiple events on the server at once, using table agnostic event stream.
 func TestServerStreamUpdateEventsTableAgnostic(t *testing.T) {
 	runTestServer(func(s *Server) {
