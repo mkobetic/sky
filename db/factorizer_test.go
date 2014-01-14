@@ -4,10 +4,12 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-// Ensure that we can factorize and defactoize values
-func TestFactorization(t *testing.T) {
+// Ensure that we can factorize and defactorize values.
+func TestFactorizer(t *testing.T) {
 	withFactorizer(func(f *factorizer) {
 		num, err := f.Factorize("foo", "bar", "/index.html", true)
 		if err != nil || num != 1 {
@@ -26,6 +28,23 @@ func TestFactorization(t *testing.T) {
 		if err != nil || str != "/about.html" {
 			t.Fatalf("Wrong defactorization: exp: %v, got: %v (%v)", "/about.html", str, err)
 		}
+	})
+}
+
+// Ensure that very large factorized values get truncated.
+func TestFactorizerTruncate(t *testing.T) {
+	withFactorizer(func(f *factorizer) {
+		value := "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"
+		shortValue := f.truncate("foo", value)
+		num, err := f.Factorize("foo", "bar", value, true)
+		assert.Equal(t, num, uint64(1))
+		assert.NoError(t, err)
+		str, err := f.Defactorize("foo", "bar", 1)
+		assert.Equal(t, len(str), 494)
+		assert.NoError(t, err)
+		num2, err := f.Factorize("foo", "bar", shortValue, true)
+		assert.Equal(t, num2, uint64(1))
+		assert.NoError(t, err)
 	})
 }
 

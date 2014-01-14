@@ -10,6 +10,8 @@ import (
 	"sync"
 )
 
+const maxKeySize = 500
+
 // Factorizer object manages the factorization and defactorization of values.
 type Factorizer interface {
 	Open() error
@@ -148,6 +150,7 @@ func (f *factorizer) add(tablespace string, id string, value string) (uint64, er
 	}
 
 	// Save lookup and reverse lookup.
+	value = f.truncate(id, value)
 	if err = f.put(tablespace, f.key(id, value), strconv.FormatUint(sequence, 10)); err != nil {
 		return 0, err
 	}
@@ -301,9 +304,21 @@ func (f *factorizer) put(tablespace string, key string, value string) error {
 	return nil
 }
 
+// truncate returns the value that can be saved to the factorizer because of LMDB key size restrictions.
+func (f *factorizer) truncate(id string, value string) string {
+	size := maxKeySize - len(fmt.Sprintf("%x:%s>", len(id), id))
+	if size < len(value) {
+		return value[0:size]
+	}
+	return value
+}
+
 // The key for a given id/value.
 func (f *factorizer) key(id string, value string) string {
-	return fmt.Sprintf("%x:%s>%s", len(id), id, value)
+	if s := fmt.Sprintf("%x:%s>%s", len(id), id, value); len(s) <= maxKeySize {
+		return s
+	}
+	return fmt.Sprintf("%x:%s>%s", len(id), id, f.truncate(id, value))
 }
 
 // The reverse key for a given id/value.
