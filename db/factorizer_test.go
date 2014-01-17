@@ -3,6 +3,7 @@ package db
 import (
 	"io/ioutil"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -47,6 +48,16 @@ func TestFactorizerTruncate(t *testing.T) {
 		assert.NoError(t, err)
 	})
 }
+
+func BenchmarkFactorizer(b *testing.B) {
+	withFactorizer(func(f *factorizer) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			f.Factorize("foo", "bar", strconv.Itoa(i % 2), true)
+		}
+	})
+}
+
 
 func withFactorizer(fn func(f *factorizer)) {
 	path, _ := ioutil.TempDir("", "")
