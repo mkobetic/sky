@@ -159,6 +159,7 @@ func (s *Server) streamUpdateEventsHandler(w http.ResponseWriter, req *http.Requ
 	table, err := s.OpenTable(vars["name"])
 	if err != nil {
 		s.logger.Printf("ERR %v", err)
+		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintf(w, `{"message":"%v"}`, err)
 		return
 	}
@@ -211,6 +212,7 @@ func (s *Server) streamUpdateEventsHandler(w http.ResponseWriter, req *http.Requ
 
 	if err != nil {
 		s.logger.Printf("ERR %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, `{"message":"%v"}`, err)
 	}
 
