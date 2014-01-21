@@ -8,6 +8,8 @@ type Cursors []*mdb.Cursor
 // Close deallocates all cursor resources.
 func (s Cursors) Close() {
 	for _, c := range s {
+		txn := c.Txn()
 		c.Close()
+		txn.Commit()
 	}
 }

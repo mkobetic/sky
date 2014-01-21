@@ -18,7 +18,7 @@ import (
 
 // shard represents a subset of the database stored in a single LMDB environment.
 type shard struct {
-	sync.RWMutex
+	sync.Mutex
 	path string
 	env  *mdb.Env
 }
@@ -268,16 +268,10 @@ func (s *shard) write(tablespace string, id string, data []byte, state *core.Eve
 	if err != nil {
 		return fmt.Errorf("lmdb txn begin error: %s", err)
 	}
+	defer txn.Commit()
 
 	if err = txn.Put(dbi, []byte(id), buffer.Bytes(), mdb.NODUPDATA); err != nil {
-		txn.Abort()
 		return fmt.Errorf("lmdb txn put error: %s", err)
-	}
-
-	// Commit the transaction.
-	if err = txn.Commit(); err != nil {
-		txn.Abort()
-		return fmt.Errorf("lmdb txn commit error: %s", err)
 	}
 
 	return nil
@@ -335,15 +329,9 @@ func (s *shard) getState(tablespace string, id string) (*core.Event, []byte, err
 
 	// Retrieve byte array.
 	data, err := txn.Get(dbi, []byte(id))
+	txn.Commit()
 	if err != nil && err != mdb.NotFound {
-		txn.Abort()
 		return nil, nil, err
-	}
-
-	// Commit the transaction.
-	if err = txn.Commit(); err != nil {
-		txn.Abort()
-		return nil, nil, fmt.Errorf("shard get state commit error: %s", err)
 	}
 
 	// Decode the events into a slice.
@@ -413,17 +401,11 @@ func (s *shard) DeleteEvents(tablespace, id string) error {
 	if err != nil {
 		return fmt.Errorf("shard delete txn error: %s", err)
 	}
+	defer txn.Commit()
 
 	// Delete the key.
 	if err = txn.Del(dbi, []byte(id), nil); err != nil && err != mdb.NotFound {
-		txn.Abort()
 		return fmt.Errorf("shard delete error: %s", err)
-	}
-
-	// Commit the transaction.
-	if err = txn.Commit(); err != nil {
-		txn.Abort()
-		return fmt.Errorf("shard delete commit error: %s", err)
 	}
 
 	return nil
@@ -441,17 +423,11 @@ func (s *shard) drop(tablespace string) error {
 	if err != nil {
 		return fmt.Errorf("drop txn error: %s", err)
 	}
+	defer txn.Commit()
 
 	// Drop the table.
 	if err = txn.Drop(dbi, 1); err != nil {
-		txn.Abort()
 		return fmt.Errorf("drop error: %s", err)
-	}
-
-	// Commit the transaction.
-	if err = txn.Commit(); err != nil {
-		txn.Abort()
-		return fmt.Errorf("drop commit error: %s", err)
 	}
 
 	return nil
