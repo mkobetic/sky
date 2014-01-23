@@ -266,7 +266,7 @@ static void mp_encode_int(mp_buf *buf, int64_t n) {
 // static void mp_encode_array(mp_buf *buf, int64_t n) {
 //     unsigned char b[5];
 //     int enclen;
-// 
+//
 //     if (n <= 15) {
 //         b[0] = 0x90 | (n & 0xf);    // fix array
 //         enclen = 1;
@@ -339,7 +339,7 @@ static void mp_encode_lua_type(lua_State *L, mp_buf *buf, int level);
 // Convert a lua table into a message pack list.
 // static void mp_encode_lua_table_as_array(lua_State *L, mp_buf *buf, int level) {
 //     size_t len = lua_objlen(L,-1), j;
-// 
+//
 //     mp_encode_array(buf,len);
 //     for (j = 1; j <= len; j++) {
 //         lua_pushnumber(L,j);
@@ -379,7 +379,7 @@ static void mp_encode_lua_table_as_map(lua_State *L, mp_buf *buf, int level) {
 // static int table_is_an_array(lua_State *L) {
 //     long count = 0, idx = 0;
 //     lua_Number n;
-// 
+//
 //     lua_pushnil(L);
 //     while(lua_next(L,-2)) {
 //         // Stack: ... key value
@@ -396,7 +396,7 @@ static void mp_encode_lua_table_as_map(lua_State *L, mp_buf *buf, int level) {
 //     // repeated keys into a table, you have that if idx==count you are sure
 //     // that there are all the keys form 1 to count (both included).
 //     return idx == count;
-// 
+//
 // not_array:
 //     lua_pop(L,1);
 //     return 0;
@@ -714,12 +714,12 @@ LUALIB_API int luaopen_cmsgpack (lua_State *L) {
     lua_pushliteral(L, LUACMSGPACK_COPYRIGHT);
     lua_setfield(L, -2, "_COPYRIGHT");
     lua_pushliteral(L, LUACMSGPACK_DESCRIPTION);
-    lua_setfield(L, -2, "_DESCRIPTION"); 
+    lua_setfield(L, -2, "_DESCRIPTION");
     return 1;
 }
 
 // Copyright (C) 2012 Salvatore Sanfilippo.  All rights reserved.
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
 // "Software"), to deal in the Software without restriction, including
@@ -727,10 +727,10 @@ LUALIB_API int luaopen_cmsgpack (lua_State *L) {
 // distribute, sublicense, and/or sell copies of the Software, and to
 // permit persons to whom the Software is furnished to do so, subject to
 // the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be
 // included in all copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 // EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 // MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.

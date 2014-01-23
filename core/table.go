@@ -248,7 +248,7 @@ func (t *Table) SerializeEvent(event *Event) (map[string]interface{}, error) {
 	m := make(map[string]interface{})
 
 	// Format timestamp.
-	m["timestamp"] = event.Timestamp.UTC().Format(time.RFC3339)
+	m["timestamp"] = event.Timestamp.UTC().Format(time.RFC3339Nano)
 
 	// Convert data map to use property names.
 	if event.Data != nil {
