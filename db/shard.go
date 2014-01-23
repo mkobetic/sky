@@ -149,7 +149,7 @@ func (s *shard) insertEvents(tablespace string, id string, newEvents []*core.Eve
 		// Merge events with an existing timestamp.
 		merged := false
 		for index, event := range events {
-			if event.Timestamp.Equal(newEvent.Timestamp) {
+			if event.Timestamp.Equal(newEvent.Timestamp.Round(time.Microsecond)) {
 				if replace {
 					events[index] = newEvent
 				} else {
@@ -287,7 +287,7 @@ func (s *shard) getEvent(tablespace string, id string, timestamp time.Time) (*co
 
 	// Find an event at a given point in time.
 	for _, v := range events {
-		if v.Timestamp.Equal(timestamp) {
+		if v.Timestamp.Equal(timestamp.Round(time.Microsecond)) {
 			return v, nil
 		}
 	}

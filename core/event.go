@@ -119,7 +119,7 @@ func (e *Event) UnmarshalRaw(data []byte) error {
 
 // Compares two events for equality.
 func (e *Event) Equal(x *Event) bool {
-	if !e.Timestamp.Equal(x.Timestamp) {
+	if !e.Timestamp.Equal(x.Timestamp.Round(time.Microsecond)) {
 		return false
 	}
 	for k, v := range e.Data {
