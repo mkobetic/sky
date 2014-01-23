@@ -14,7 +14,7 @@ import (
 // A Query is a structured way of aggregating data in the database.
 type Query struct {
 	table             *core.Table
-	factorizer        db.Factorizer
+	factorizer        *db.Factorizer
 	source            string
 	refs              []*VarRef
 	sequence          int
@@ -42,11 +42,11 @@ func (q *Query) SetTable(table *core.Table) {
 }
 
 // Retrieves the factors database this query is associated with.
-func (q *Query) Factorizer() db.Factorizer {
+func (q *Query) Factorizer() *db.Factorizer {
 	return q.factorizer
 }
 
-func (q *Query) SetFactorizer(factorizer db.Factorizer) {
+func (q *Query) SetFactorizer(factorizer *db.Factorizer) {
 	q.factorizer = factorizer
 }
 

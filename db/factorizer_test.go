@@ -11,7 +11,7 @@ import (
 
 // Ensure that we can factorize and defactorize values.
 func TestFactorizer(t *testing.T) {
-	withFactorizer(func(f *factorizer) {
+	withFactorizer(func(f *Factorizer) {
 		num, err := f.Factorize("foo", "bar", "/index.html", true)
 		if err != nil || num != 1 {
 			t.Fatalf("Wrong factorization: exp: %v, got: %v (%v)", 1, num, err)
@@ -34,7 +34,7 @@ func TestFactorizer(t *testing.T) {
 
 // Ensure that very large factorized values get truncated.
 func TestFactorizerTruncate(t *testing.T) {
-	withFactorizer(func(f *factorizer) {
+	withFactorizer(func(f *Factorizer) {
 		value := "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"
 		shortValue := f.truncate("foo", value)
 		num, err := f.Factorize("foo", "bar", value, true)
@@ -50,20 +50,28 @@ func TestFactorizerTruncate(t *testing.T) {
 }
 
 func BenchmarkFactorizer(b *testing.B) {
-	withFactorizer(func(f *factorizer) {
+	withFactorizer(func(f *Factorizer) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			f.Factorize("foo", "bar", strconv.Itoa(i % 2), true)
+			f.Factorize("foo", "bar", strconv.Itoa(i), true)
 		}
 	})
 }
 
+func BenchmarkFactorizerCache(b *testing.B) {
+	withFactorizer(func(f *Factorizer) {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			f.Factorize("foo", "bar", strconv.Itoa(i%2), true)
+		}
+	})
+}
 
-func withFactorizer(fn func(f *factorizer)) {
+func withFactorizer(fn func(f *Factorizer)) {
 	path, _ := ioutil.TempDir("", "")
 	defer os.RemoveAll(path)
 
-	f := NewFactorizer(path, false, 4096, 126).(*factorizer)
+	f := NewFactorizer(path)
 	if err := f.Open(); err != nil {
 		panic(err.Error())
 	}
