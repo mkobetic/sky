@@ -15,13 +15,13 @@ func TestServerUpdateEvents(t *testing.T) {
 		setupTestProperty("foo", "baz", true, "integer")
 
 		// Send two new events.
-		resp, _ := sendTestHttpRequest("PUT", "http://localhost:8586/tables/foo/objects/xyz/events/2012-01-01T02:00:00Z", "application/json", `{"data":{"bar":"myValue", "baz":12}}`)
+		resp, _ := sendTestHttpRequest("PUT", "http://localhost:8586/tables/foo/objects/xyz/events/2012-01-01T02:00:00.123456111Z", "application/json", `{"data":{"bar":"myValue", "baz":12}}`)
 		assertResponse(t, resp, 200, "", "PUT /tables/:name/objects/:objectId/events failed.")
 		resp, _ = sendTestHttpRequest("PUT", "http://localhost:8586/tables/foo/objects/xyz/events/2012-01-01T03:00:00Z", "application/json", `{"data":{"bar":"myValue2"}}`)
 		assertResponse(t, resp, 200, "", "PUT /tables/:name/objects/:objectId/events failed.")
 
 		// Replace the first one.
-		resp, _ = sendTestHttpRequest("PUT", "http://localhost:8586/tables/foo/objects/xyz/events/2012-01-01T02:00:00Z", "application/json", `{"data":{"bar":"myValue3", "baz":1000}}`)
+		resp, _ = sendTestHttpRequest("PUT", "http://localhost:8586/tables/foo/objects/xyz/events/2012-01-01T02:00:00.123456222Z", "application/json", `{"data":{"bar":"myValue3", "baz":1000}}`)
 		assertResponse(t, resp, 200, "", "PUT /tables/:name/objects/:objectId/events failed.")
 
 		// Merge the second one.
@@ -30,7 +30,7 @@ func TestServerUpdateEvents(t *testing.T) {
 
 		// Check our work.
 		resp, _ = sendTestHttpRequest("GET", "http://localhost:8586/tables/foo/objects/xyz/events", "application/json", "")
-		assertResponse(t, resp, 200, `[{"data":{"bar":"myValue3","baz":1000},"timestamp":"2012-01-01T02:00:00Z"},{"data":{"bar":"myValue2","baz":20},"timestamp":"2012-01-01T03:00:00Z"}]`+"\n", "GET /tables/:name/objects/:objectId/events failed.")
+		assertResponse(t, resp, 200, `[{"data":{"bar":"myValue3","baz":1000},"timestamp":"2012-01-01T02:00:00.123456Z"},{"data":{"bar":"myValue2","baz":20},"timestamp":"2012-01-01T03:00:00Z"}]`+"\n", "GET /tables/:name/objects/:objectId/events failed.")
 
 		// Grab a single event.
 		resp, _ = sendTestHttpRequest("GET", "http://localhost:8586/tables/foo/objects/xyz/events/2012-01-01T03:00:00Z", "application/json", "")
