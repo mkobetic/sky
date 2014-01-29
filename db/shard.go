@@ -19,9 +19,54 @@ type shard struct {
 	env  *mdb.Env
 }
 
+type Stat struct {
+	Entries      uint64 `json:"entries"` // Number of data items
+	Size         uint64 `json:"size"`    // Size of the data memory map
+	Depth        uint   `json:"depth"`   // Depth (height) of the B-tree
+	Transactions struct {
+		Last uint64 `json:"last"` // ID of the last committed transaction
+	} `json:"transactions"`
+	Readers struct {
+		Max     uint `json:"max"`     // maximum number of threads for the environment
+		Current uint `json:"current"` // maximum number of threads used in the environment
+	} `json:"readers"`
+	Pages struct {
+		Last     uint64 `json:"last"`     // ID of the last used page
+		Size     uint   `json:"size"`     // Size of a database page. This is currently the same for all databases.
+		Branch   uint64 `json:"branch"`   // Number of internal (non-leaf) pages
+		Leaf     uint64 `json:"leaf"`     // Number of leaf pages
+		Overflow uint64 `json:"overflow"` // Number of overflow pages
+	} `json:"pages"`
+}
+
 // newShard creates a new shard.
 func newShard(path string) *shard {
 	return &shard{path: path}
+}
+
+func (s *shard) Stat() (*Stat, error) {
+	stat, err := s.env.Stat()
+	if err != nil {
+		return nil, err
+	}
+	info, err := s.env.Info()
+	if err != nil {
+		return nil, err
+	}
+	ss := &Stat{
+		Entries: stat.Entries,
+		Size:    info.MapSize,
+		Depth:   stat.Depth,
+	}
+	ss.Transactions.Last = info.LastTxnID
+	ss.Readers.Max = info.MaxReaders
+	ss.Readers.Current = info.NumReaders
+	ss.Pages.Last = info.LastPNO
+	ss.Pages.Size = stat.PSize
+	ss.Pages.Branch = stat.BranchPages
+	ss.Pages.Leaf = stat.LeafPages
+	ss.Pages.Overflow = stat.OwerflowPages
+	return ss, nil
 }
 
 // Open allocates a new LMDB environment.

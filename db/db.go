@@ -32,6 +32,7 @@ type DB interface {
 	DeleteObject(tablespace string, id string) error
 	Merge(tablespace string, destinationId string, sourceId string) error
 	Drop(tablespace string) error
+	Stats() ([]*Stat, error)
 }
 
 // db is the default implementation of the DB interface.
@@ -261,4 +262,16 @@ func (db *db) Drop(tablespace string) error {
 		}
 	}
 	return err
+}
+
+func (db *db) Stats() ([]*Stat, error) {
+	stats := make([]*Stat, 0, len(db.shards))
+	for _, shard := range db.shards {
+		stat, err := shard.Stat()
+		if err != nil {
+			return stats, err
+		}
+		stats = append(stats, stat)
+	}
+	return stats, nil
 }
