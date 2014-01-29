@@ -182,7 +182,7 @@ func TestServerStreamUpdateEventsFlushesOnPeriod(t *testing.T) {
 
 		client.Flush()
 
-		time.Sleep(time.Duration(s.StreamFlushPeriod) * time.Millisecond)
+		time.Sleep(2 * time.Duration(s.StreamFlushPeriod) * time.Millisecond)
 
 		// Assert that the events were flushed
 		resp, err := sendTestHttpRequest("GET", "http://localhost:8586/tables/foo/objects/xyz/events", "application/json", "")
